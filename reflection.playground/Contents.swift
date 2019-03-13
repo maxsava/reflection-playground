@@ -1,6 +1,7 @@
 import UIKit
 
 
+
 func stringRepresentation(of object: Any, indentationLevel: Int = 1) -> String {
   let reflection = Mirror(reflecting: object)
   let type = reflection.subjectType
