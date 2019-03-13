@@ -1,0 +1,84 @@
+#!/usr/bin/env ruby
+
+require 'net/http'
+require 'uri'
+require 'json'
+
+REPO_HOLDER = 'maxsava'
+REPO_NAME = 'reflection-playground'
+BASE_URL = "https://api.github.com/repos/#{REPO_HOLDER}/#{REPO_NAME}"
+
+# url = URI.parse("https://api.github.com/repos/blacklane/cassandra/releases")
+
+puts 'Start creating release'
+
+def need_create_release_for(tag)
+    url = URI.parse("#{BASE_URL}/releases/tags/#{tag}")
+
+    http = Net::HTTP.new(url.host, url.port)
+    http.use_ssl = true
+
+    request = Net::HTTP::Get.new(url.request_uri)
+    request["Authorization"] = "token #{get_github_token}"
+
+    response = http.request(request)
+
+    return response.code.to_i == 404
+end
+
+def get_github_token
+    token = ENV['GITHUB_TOKEN']
+    if token.nil?
+        $stdout.puts "Please input your auth token for github. \nTo avoid being asked again you can set it as an environment variable GITHUB_TOKEN"
+
+        token = gets.chomp
+    end
+
+    return token
+end
+
+def create_release(previous_tag, recent_tag)
+    titles_as_string = %x(git log --pretty=format:%s #{previous_tag}..#{recent_tag})
+    titles = titles_as_string.split("\n")
+
+    url = URI.parse("#{BASE_URL}/releases")
+
+    http = Net::HTTP.new(url.host, url.port)
+    http.use_ssl = true
+
+    request = Net::HTTP::Post.new(url.request_uri)
+    request["Authorization"] = "token #{get_github_token}"
+    request.body = {
+        tag_name: recent_tag,
+        target_commitish: "master",
+        name: "Release #{recent_tag}",
+        body: titles_as_string,
+        draft: false,
+        prerelease: false
+    }.to_json
+
+    response = http.request(request)
+
+    if response.code.to_i == 201
+        $stdout.puts 'Release has been created!'
+    else
+        $stderr.puts 'Something went wrong:'
+        $stderr.puts response.body
+    end
+end
+
+ARGV.each do|a|
+    puts "Argument: #{a}"
+end
+
+tags_as_string = %x(git describe --tags $(git rev-list --tags --max-count=2) --abbrev=0)
+tags = tags_as_string.split("\n")
+
+# git tag -l --points-at HEAD
+
+recent_tag = tags[0]
+previous_tag = tags[1]
+
+if need_create_release_for(recent_tag)
+    create_release(previous_tag, recent_tag)
+end
